@@ -1,0 +1,696 @@
+#This repository has commands related to Kim & De-Kayne et al. XXXX (URL XXX) 
+#This paper highlights the structure of each of the three alleles of the Danaus wing-pattern supergene
+
+#1. The polishing of the MB18102 MAT and PAT assemblies
+#2. The repeat annotation and genome annotation of both MB18102 assemblies 
+#3. The repeat annotation and genome annotation of both SB211 assemblies
+#4. The filtering of gene alignments and production of gene trees for the full genome and each of the structural rearrangements
+#5. TE landscapes for chr15 equivalent
+
+qstat -f -u "*"
+
+/ceph/software/utilities/sge/qlogin -pe smp64 64 -N qlogin -l h=bigfoot
+
+######
+# 1. POLISHING
+######
+cd /scratch/rdekayne/hapog
+sconda /ceph/users/amackintosh/.conda/envs/HAPO-G
+
+rsync /data/martin/genomics/raw/Novogene_Jan2020_H204SC19123472/MB18102/* .
+rsync /data/martin/genomics/raw/Novogene_Jan2021_H204SC20113207/X204SC20113207-Z01-F001/raw_data/MB18102/* .
+
+
+/ceph/software/utilities/sge/qlogin -pe smp64 64 -N qlogin -l h=bigfoot
+
+mkdir -p /scratch/rdekayne/hapog_newassembly && cd /scratch/rdekayne/hapog_newassembly
+mkdir reads && cd reads
+
+#rsync /data/martin/genomics/raw/Novogene_Jan2020_H204SC19123472/MB18102/* .
+r#sync /data/martin/genomics/raw/Novogene_Jan2021_H204SC20113207/X204SC20113207-Z01-F001/raw_data/MB18102/* .
+
+#zcat MB18102_EDSW200000317-1a_HYGJVDSXX_L2_1.fq.gz MB18102_EDSW200018990-1a_HK55TDSXY_L1_1.fq.gz > forward.fq.gz
+#zcat MB18102_EDSW200000317-1a_HYGJVDSXX_L2_2.fq.gz MB18102_EDSW200018990-1a_HK55TDSXY_L1_2.fq.gz > reverse.fq.gz
+
+cp ../../hapog_2/reads/forward.fq.gz .
+cp ../../hapog_2/reads/reverse.fq.gz .
+
+sconda /ceph/users/amackintosh/.conda/envs/HAPO-G
+
+#prepare assembly
+cp /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/* .
+
+awk '{print $1}' MB18102_MAT.fasta > MB18102_MAT.renamed.fasta
+awk '{print $1}' MB18102_PAT.fasta > MB18102_PAT.renamed.fasta
+
+sed 's/>/>MAT_/g' MB18102_MAT.renamed.fasta > MAT.fasta
+sed 's/>/>PAT_/g' MB18102_PAT.renamed.fasta > PAT.fasta
+
+cat MAT.fasta PAT.fasta > both_v8_MB18102.fasta
+
+rep ">" MAT.fasta | wc -l
+722
+grep ">" PAT.fasta | wc -l
+208
+grep ">" both_v8_MB18102.fasta | wc -l
+930
+
+#Before running Hapo-G, you should make sure that BWA and Samtools are in your $PATH:
+
+#which bwa
+#which samtools
+#Standard pipeline
+#You can launch Hapo-G by using the Python3 script in its root directory:
+
+hapog.py --genome ./both_v8_MB18102.fasta --pe1 reads/forward.fq.gz --pe2 reads/reverse.fq.gz -o polishing_hapog_round1 -t 64 -u && touch hapog_1_done.txt
+hapog.py --genome ./polishing_hapog_round1/hapog_results/hapog.fasta --pe1 reads/forward.fq.gz --pe2 reads/reverse.fq.gz -o polishing_hapog_round2 -t 64 -u && touch hapog_2_done.txt
+
+mkdir OUTPUT && cd OUTPUT
+
+sconda /ceph/users/amackintosh/.conda/envs/assembly
+
+seqtk seq -l0 ../polishing_hapog_round2/hapog_results/hapog.fasta > hapog_unwrapped.fasta
+
+grep -A1 ">MAT" hapog_unwrapped.fasta > MAT_v8_polished.fasta
+sed -i 's/>MAT_/>/g' MAT_v8_polished.fasta
+
+grep -A1 ">PAT" hapog_unwrapped.fasta > PAT_v8_polished.fasta
+sed -i 's/>PAT_/>/g' PAT_v8_polished.fasta
+
+mv MAT_v8_polished.fasta MB18102_MAT_polished.fasta
+mv PAT_v8_polished.fasta MB18102_PAT_polished.fasta
+
+sed 's/_polished//g' MB18102_MAT_polished.fasta > MB18102_MAT.fasta
+sed 's/_polished//g' MB18102_PAT_polished.fasta > MB18102_PAT.fasta
+
+rsync MB18102_MAT.fasta /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/
+rsync MB18102_PAT.fasta /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/
+
+mkdir MB18102_MAT
+mkdir MB18102_PAT
+mkdir masking && cd masking
+awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/MB18102_MAT.fasta > MB18102_MAT_v8_polished.uppercase.fasta
+awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/MB18102_PAT.fasta > MB18102_PAT_v8_polished.uppercase.fasta
+
+#hardmasking Danaus_genome/Dchry2/Dchry2_haplotigs
+
+mkdir -p /scratch/rdekayne/dchry2_2_haplotigs && cd /scratch/rdekayne/dchry2_2_haplotigs
+
+awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' /data/martin/genomics/analyses/Danaus_genome/Dchry2/Dchry2_haplotigs/Dchry2.haplotigs.fasta > dchry2_2_haplotigs.uppercase.fasta
+
+sconda repeats
+/ceph/software/repeatmasker/RepeatMasker-4.1.0/RepeatMasker -e rmblast -pa 48 -s -a -xsmall -gccalc -lib ../repeats/Lepidoptera_and_danaus_chrysippus2.2.repeatmasker ./dchry2_2_haplotigs.uppercase.fasta
+
+#hardmasking
+sed -e '/^>/! s/[[:lower:]]/N/g' /scratch/rdekayne/dchry2_2_haplotigs/dchry2_2_haplotigs.uppercase.fasta.masked > dchry2_2_haplotigs.uppercase.hardmasked.fasta
+
+cp dchry2_2_haplotigs.uppercase.hardmasked.fasta /data/martin/genomics/analyses/Danaus_genome/Dchry2/Dchry2_haplotigs/
+
+######
+# 2. REPEAT MASKING AND ANNOTATING MB18102
+######
+
+sconda repeats
+/ceph/software/repeatmasker/RepeatMasker-4.1.0/RepeatMasker -e rmblast -pa 48 -s -a -xsmall -gccalc -lib ../../repeats/Lepidoptera_and_danaus_chrysippus2.2.repeatmasker ./MB18102_MAT_v8_polished.uppercase.fasta
+/ceph/software/repeatmasker/RepeatMasker-4.1.0/RepeatMasker -e rmblast -pa 48 -s -a -xsmall -gccalc -lib ../../repeats/Lepidoptera_and_danaus_chrysippus2.2.repeatmasker ./MB18102_PAT_v8_polished.uppercase.fasta
+
+#then hardmask these:
+sed -e '/^>/! s/[[:lower:]]/N/g' MB18102_MAT_v8_polished.uppercase.fasta.masked > MB18102_MAT_v8_polished.hardmasked.fasta
+sed -e '/^>/! s/[[:lower:]]/N/g' MB18102_PAT_v8_polished.uppercase.fasta.masked > MB18102_PAT_v8_polished.hardmasked.fasta
+
+rsync *.hardmasked.fasta /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/
+rsync *.fasta.masked /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/
+
+#annotation
+sconda annotation
+
+cd /scratch/rdekayne/Dchr_KW_V8_annotation
+cp */*.masked .
+
+cd /scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_MAT
+/ceph/software/conda/envs/annotation/bin/braker.pl --AUGUSTUS_CONFIG_PATH=/ceph/users/rdekayne/software/Augustus/config --AUGUSTUS_SCRIPTS_PATH=/ceph/users/rdekayne/software/Augustus/scripts --cores 48 --gff3 --species=danaus_chrysippus_v8_MB18102_MAT_a001 --workingdir=/scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_MAT --softmasking --genome=/scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_MAT_v8_polished.uppercase.fasta.masked --prot_seq=/data/martin/genomics/analyses/Danaus_genome/MB181_trio/annotation/protein_set/dplex2_uniprot-proteome_UP000596680_and_dplex_mex.fasta --prg=gth --gth2traingenes --trainFromGth
+
+sconda /ceph/users/amackintosh/.conda/envs/gt/
+
+gt gff3 -sort -tidy -retainids -fixregionboundaries augustus.hints.gff3 > ./MB18102_MAT.tidy.gff3
+# extract CDS sequences
+gt extractfeat -type CDS -join -retainids -seqfile /scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_MAT_v8_polished.uppercase.fasta.masked -matchdescstart -o MB18102_MAT.cds.fasta MB18102_MAT.tidy.gff3
+# extract protein sequences
+gt extractfeat -type CDS -translate -join -retainids -seqfile /scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_MAT_v8_polished.uppercase.fasta.masked -matchdescstart -o MB18102_MAT.sequences.aa.fasta MB18102_MAT.tidy.gff3
+# get stats
+gt stat -genelengthdistri -genescoredistri -exonlengthdistri -exonnumberdistri -intronlengthdistri -cdslengthdistri -o MB18102_MAT.stats.txt MB18102_MAT.tidy.gff3
+
+#parsed genome node DAGs: 15092
+#sequence regions: 590 (total length: 249765464)
+#genes: 14502
+#protein-coding genes: 14502
+#mRNAs: 17230
+#protein-coding mRNAs: 17230
+#exons: 117507
+#CDSs: 117507
+#introns: 100477
+#start_codons: 17097
+#stop_codons: 17119
+
+mkdir /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/braker_annotation_RDK
+cp MB18102_MAT* /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/braker_annotation_RDK
+
+cd /scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_PAT
+/ceph/software/conda/envs/annotation/bin/braker.pl --AUGUSTUS_CONFIG_PATH=/ceph/users/rdekayne/software/Augustus/config --AUGUSTUS_SCRIPTS_PATH=/ceph/users/rdekayne/software/Augustus/scripts --cores 48 --gff3 --species=danaus_chrysippus_v8_MB18102_PAT_a001 --workingdir=/scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_PAT --softmasking --genome=/scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_PAT_v8_polished.uppercase.fasta.masked --prot_seq=/data/martin/genomics/analyses/Danaus_genome/MB181_trio/annotation/protein_set/dplex2_uniprot-proteome_UP000596680_and_dplex_mex.fasta --prg=gth --gth2traingenes --trainFromGth
+
+gt gff3 -sort -tidy -retainids -fixregionboundaries augustus.hints.gff3 > ./MB18102_PAT.tidy.gff3
+# extract CDS sequences
+gt extractfeat -type CDS -join -retainids -seqfile /scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_PAT_v8_polished.uppercase.fasta.masked -matchdescstart -o MB18102_PAT.cds.fasta MB18102_PAT.tidy.gff3
+# extract protein sequences
+gt extractfeat -type CDS -translate -join -retainids -seqfile /scratch/rdekayne/Dchr_KW_V8_annotation/MB18102_PAT_v8_polished.uppercase.fasta.masked -matchdescstart -o MB18102_PAT.sequences.aa.fasta MB18102_PAT.tidy.gff3
+# get stats
+gt stat -genelengthdistri -genescoredistri -exonlengthdistri -exonnumberdistri -intronlengthdistri -cdslengthdistri -o MB18102_PAT.stats.txt MB18102_PAT.tidy.gff3
+
+#parsed genome node DAGs: 16001
+#sequence regions: 150 (total length: 301365073)
+#genes: 15851
+#protein-coding genes: 15851
+#mRNAs: 19115
+#protein-coding mRNAs: 19115
+##exons: 135468
+#CDSs: 135468
+#introns: 116415
+#start_codons: 19061
+#stop_codons: 19097
+
+cp MB18102_PAT* /data/martin/genomics/analyses/Danaus_genome/MB181_trio/KKIM_assemblies/v8/polished/braker_annotation_RDK
+
+######
+# 3. REPEAT MASKING AND ANNOTATING SB211
+######
+
+#first sort out repeats and softmasking
+
+#/data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/SB211_MAT.fasta /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/SB211_PAT.fasta > SB211_all.fasta
+
+#and now mask the repeats
+awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/SB211_MAT.fasta > SB211_MAT.uppercase.fasta
+awk 'BEGIN{FS=" "}{if(!/>/){print toupper($0)}else{print $1}}' /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/SB211_PAT.fasta > SB211_PAT.uppercase.fasta
+
+sconda repeats
+/ceph/software/repeatmasker/RepeatMasker-4.1.0/RepeatMasker -e rmblast -pa 48 -s -a -xsmall -gccalc -lib ../../repeats/Lepidoptera_and_danaus_chrysippus2.2.repeatmasker ./SB211_MAT.uppercase.fasta
+/ceph/software/repeatmasker/RepeatMasker-4.1.0/RepeatMasker -e rmblast -pa 48 -s -a -xsmall -gccalc -lib ../../repeats/Lepidoptera_and_danaus_chrysippus2.2.repeatmasker ./SB211_PAT.uppercase.fasta
+
+cd /scratch/rdekayne/Dchr_SB211_annotation
+
+cp */*.masked .
+
+cd /scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT
+/ceph/software/conda/envs/annotation/bin/braker.pl --cores 48 --gff3 --species=danaus_chrysippus_v4_SB211_MAT_a003 --workingdir=/scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT --softmasking --genome=/scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT.uppercase.fasta.masked --prot_seq=/data/martin/genomics/analyses/Danaus_genome/MB181_trio/annotation/protein_set/dplex2_uniprot-proteome_UP000596680_and_dplex_mex.fasta --prg=gth --gth2traingenes --trainFromGth
+cd /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT
+/ceph/software/conda/envs/annotation/bin/braker.pl --cores 48 --gff3 --species=danaus_chrysippus_v4_SB211_PAT_a003 --workingdir=/scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT --softmasking --genome=/scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked --prot_seq=/data/martin/genomics/analyses/Danaus_genome/MB181_trio/annotation/protein_set/dplex2_uniprot-proteome_UP000596680_and_dplex_mex.fasta --prg=gth --gth2traingenes --trainFromGth
+
+
+sed -e '/^>/! s/[[:lower:]]/N/g' /scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT.uppercase.fasta.masked > SB211_MAT.hardmasked.fasta;
+sed -e '/^>/! s/[[:lower:]]/N/g' /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked > SB211_PAT.hardmasked.fasta;
+mv SB211* /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/
+
+cd /scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT
+gt gff3 -sort -tidy -retainids -fixregionboundaries augustus.hints.gff3 > ./SB211_MAT.tidy.gff3
+gt extractfeat -type CDS -join -retainids -seqfile /scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT.uppercase.fasta.masked -matchdescstart -o SB211_MAT.cds.fasta SB211_MAT.tidy.gff3
+gt extractfeat -type CDS -translate -join -retainids -seqfile /scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT.uppercase.fasta.masked -matchdescstart -o SB211_MAT.sequences.aa.fasta SB211_MAT.tidy.gff3
+gt stat -genelengthdistri -genescoredistri -exonlengthdistri -exonnumberdistri -intronlengthdistri -cdslengthdistri -o SB211_MAT.stats.txt SB211_MAT.tidy.gff3
+
+#parsed genome node DAGs: 16483
+#sequence regions: 798 (total length: 281006096)
+#genes: 15685
+#protein-coding genes: 15685
+#mRNAs: 18678
+#protein-coding mRNAs: 18678
+#exons: 129552
+#CDSs: 129552
+#introns: 111165
+#start_codons: 18464
+#stop_codons: 18537
+
+cd /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT
+gt gff3 -sort -tidy -retainids -fixregionboundaries augustus.hints.gff3 > ./SB211_PAT.tidy.gff3
+gt extractfeat -type CDS -join -retainids -seqfile /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked -matchdescstart -o SB211_PAT.cds.fasta SB211_PAT.tidy.gff3
+gt extractfeat -type CDS -translate -join -retainids -seqfile /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked -matchdescstart -o SB211_PAT.sequences.aa.fasta SB211_PAT.tidy.gff3
+gt stat -genelengthdistri -genescoredistri -exonlengthdistri -exonnumberdistri -intronlengthdistri -cdslengthdistri -o SB211_PAT.stats.txt SB211_PAT.tidy.gff3
+
+#parsed genome node DAGs: 16692
+#sequence regions: 342 (total length: 313892598)
+#genes: 16350
+#protein-coding genes: 16350
+#mRNAs: 19697
+#protein-coding mRNAs: 19697
+#exons: 140356
+#CDSs: 140356
+#introns: 120779
+#start_codons: 19586
+#stop_codons: 19644
+
+cd /scratch/rdekayne/Dchr_SB211_annotation
+cp */*.cds.fasta /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/Braker_annotation_RDK
+cp */*.sequences.aa.fasta /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/Braker_annotation_RDK
+cp */*.stats* /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/Braker_annotation_RDK
+cp */*.tidy.gff3 /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/Braker_annotation_RDK
+cp *uppercase.fasta.masked* /data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/Braker_annotation_RDK
+##/data/martin/genomics/analyses/Danaus_genome/SB211_trio/assemblies/Braker_annotation_RDK
+
+######
+# 4. GENE ALINGMENTS AND TREES
+######
+
+#Multi spp coalescence:
+
+#prepare the input of gene-separated aligned fastas
+
+#zcat /data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.diplo.fasta.gz | grep ">" | sed 's/_/\t/g' | cut -f2 | uniq > gene_names.txt
+
+cd genes
+zcat /data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.diplo.fasta.gz | awk -v RS= '{close("gene_" i ".txt"); i++}{print > ("gene_" i ".txt")}'
+
+ls *.txt > ../gene_names.txt
+
+touch ccount.txt
+touch ncount.txt
+
+cat gene_names.txt | while read line 
+do
+	echo ${line}
+	head -n2 genes/${line} | tail -n1 | wc -c >> ccount.txt
+	head -n2 genes/${line} | tail -n1 | tr -cd 'N' | wc -c >> ncount.txt
+done 
+
+paste gene_names.txt ncount.txt ccount.txt > genes_N_count.txt
+
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt > filt.txt
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt | cut -f 1 > filt_genes.txt
+
+awk '{if($2 <= 500 && (($2/$3)*100) < 50) {print $0}}' genes_N_count.txt | wc -l
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt | cut -f 1 > filt_genes.txt
+
+
+
+#and then use pargenes to run all gene trees and ASTRAL
+
+conda create -n pargenes
+sconda pargenes
+conda install -c bioconda pargenes
+conda install -c conda-forge parallel
+
+#/data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.excl_div_chroms.diplo.fasta.gz
+
+#separate out into genes
+zcat /data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.diplo.fasta.gz | awk -v RS= '{close("gene_" i ".txt"); i++}{print > ("gene_" i ".txt")}'
+
+ls *.txt > ../gene_names.txt
+
+touch ccount.txt
+touch ncount.txt
+
+cat gene_names.txt | while read line 
+do
+	echo ${line}
+	head -n2 genes/${line} | tail -n1 | wc -c >> ccount.txt
+	head -n2 genes/${line} | tail -n1 | tr -cd 'N' | wc -c >> ncount.txt
+done 
+
+paste gene_names.txt ncount.txt ccount.txt > genes_N_count.txt
+
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt > filt.txt
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt | cut -f 1 > filt_genes.txt
+
+wc -l filt_genes.txt 
+#5954 filt_genes.txt
+
+cat filt_genes.txt | while read line 
+do
+	cut -d'_' -f1 genes/${line} > alignment_test_renamed/${line}
+done
+
+ls alignment_test_renamed/* | wc -l
+#5954
+
+
+pargenes.py -a ./alignment_test_renamed -o ./alignment_test_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+####################
+#now do the same for:
+#/data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.chrysippus_inv.diplo.fasta.gz
+#/data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.orientis_inv1_excl_chrysippus_inv.diplo.fasta.gz
+#/data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.orientis_inv2.diplo.fasta.gz
+#/data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.orientis_inv3.diplo.fasta.gz
+
+/ceph/software/utilities/sge/qlogin -pe smp64 64 -N qlogin -l h=bigwig
+
+####################
+#chrysippus_inv
+#####################
+mkdir -p /scratch/rdekayne/pargenes/chrysippus_inv/genes && cd /scratch/rdekayne/pargenes/chrysippus_inv/genes
+zcat /data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.chrysippus_inv.diplo.fasta.gz | awk -v RS= '{close("gene_" i ".txt"); i++}{print > ("gene_" i ".txt")}'
+
+ls *.txt > ../gene_names.txt
+
+cd ../
+
+touch ccount.txt && touch ncount.txt
+
+cat gene_names.txt | while read line 
+do
+	echo ${line}
+	head -n2 genes/${line} | tail -n1 | wc -c >> ccount.txt
+	head -n2 genes/${line} | tail -n1 | tr -cd 'N' | wc -c >> ncount.txt
+done 
+
+paste gene_names.txt ncount.txt ccount.txt > genes_N_count.txt
+
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt > filt.txt
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt | cut -f 1 > filt_genes.txt
+
+wc -l filt_genes.txt 
+#18 filt_genes.txt
+
+mkdir alignment_test_renamed
+
+cat filt_genes.txt | while read line 
+do
+	cut -d'_' -f1 genes/${line} > alignment_test_renamed/${line}
+done
+
+ls alignment_test_renamed/* | wc -l
+
+pargenes.py -a ./alignment_test_renamed -o ./alignment_test_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+####################
+#orientis_inv1_excl_chrysippus_inv
+#####################
+mkdir -p /scratch/rdekayne/pargenes/orientis_inv1_excl_chrysippus_inv/genes && cd /scratch/rdekayne/pargenes/orientis_inv1_excl_chrysippus_inv/genes
+zcat /data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.orientis_inv1_excl_chrysippus_inv.diplo.fasta.gz | awk -v RS= '{close("gene_" i ".txt"); i++}{print > ("gene_" i ".txt")}'
+
+ls *.txt > ../gene_names.txt
+
+cd ../
+
+touch ccount.txt && touch ncount.txt
+
+cat gene_names.txt | while read line 
+do
+	echo ${line}
+	head -n2 genes/${line} | tail -n1 | wc -c >> ccount.txt
+	head -n2 genes/${line} | tail -n1 | tr -cd 'N' | wc -c >> ncount.txt
+done 
+
+paste gene_names.txt ncount.txt ccount.txt > genes_N_count.txt
+
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt > filt.txt
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt | cut -f 1 > filt_genes.txt
+
+wc -l filt_genes.txt 
+#38 filt_genes.txt
+
+mkdir alignment_test_renamed
+
+cat filt_genes.txt | while read line 
+do
+	cut -d'_' -f1 genes/${line} > alignment_test_renamed/${line}
+done
+
+ls alignment_test_renamed/* | wc -l
+
+pargenes.py -a ./alignment_test_renamed -o ./alignment_test_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+cp alignment_test_out/astral_run/output_species_tree.newick orientis_inv1_excl_chrysippus_inv.tree.out
+
+####################
+#orientis_inv2
+#######################
+mkdir -p /scratch/rdekayne/pargenes/orientis_inv2/genes && cd /scratch/rdekayne/pargenes/orientis_inv2/genes
+zcat /data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.orientis_inv2.diplo.fasta.gz | awk -v RS= '{close("gene_" i ".txt"); i++}{print > ("gene_" i ".txt")}'
+
+ls *.txt > ../gene_names.txt
+
+cd ../
+
+touch ccount.txt && touch ncount.txt
+
+cat gene_names.txt | while read line 
+do
+	echo ${line}
+	head -n2 genes/${line} | tail -n1 | wc -c >> ccount.txt
+	head -n2 genes/${line} | tail -n1 | tr -cd 'N' | wc -c >> ncount.txt
+done 
+
+paste gene_names.txt ncount.txt ccount.txt > genes_N_count.txt
+
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt > filt.txt
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt | cut -f 1 > filt_genes.txt
+
+wc -l filt_genes.txt 
+#61 filt_genes.txt
+
+mkdir alignment_test_renamed
+
+cat filt_genes.txt | while read line 
+do
+	cut -d'_' -f1 genes/${line} > alignment_test_renamed/${line}
+done
+
+ls alignment_test_renamed/* | wc -l
+
+pargenes.py -a ./alignment_test_renamed -o ./alignment_test_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+cp alignment_test_out/astral_run/output_species_tree.newick orientis_inv2.tree.out
+
+####################
+#orientis_inv3
+#######################
+mkdir -p /scratch/rdekayne/pargenes/orientis_inv3/genes && cd /scratch/rdekayne/pargenes/orientis_inv3/genes
+zcat /data/martin/genomics/analyses/Danaus_genotyping/dan17.BT.DP5GQ20.CDS.nomis.orientis_inv3.diplo.fasta.gz | awk -v RS= '{close("gene_" i ".txt"); i++}{print > ("gene_" i ".txt")}'
+
+ls *.txt > ../gene_names.txt
+
+cd ../
+
+touch ccount.txt && touch ncount.txt
+
+cat gene_names.txt | while read line 
+do
+	echo ${line}
+	head -n2 genes/${line} | tail -n1 | wc -c >> ccount.txt
+	head -n2 genes/${line} | tail -n1 | tr -cd 'N' | wc -c >> ncount.txt
+done 
+
+paste gene_names.txt ncount.txt ccount.txt > genes_N_count.txt
+
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt > filt.txt
+awk '{if($2 <= 500 && (($2/$3)*100) < 75) {print $0}}' genes_N_count.txt | cut -f 1 > filt_genes.txt
+
+wc -l filt_genes.txt 
+#15 filt_genes.txt
+
+mkdir alignment_test_renamed
+
+cat filt_genes.txt | while read line 
+do
+	cut -d'_' -f1 genes/${line} > alignment_test_renamed/${line}
+done
+
+ls alignment_test_renamed/* | wc -l
+
+pargenes.py -a ./alignment_test_renamed -o ./alignment_test_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+cp alignment_test_out/astral_run/output_species_tree.newick orientis_inv3.tree.out
+
+
+
+######################
+#CONCAT_TEST
+##############################
+##########chrysippus_inv
+#now the same but concatenate all genes and run in one raxml run:
+#get list of individuals:
+
+grep ">" ../../pargenes/chrysippus_inv/alignment_test_renamed/gene_11.txt | sed 's/>//g' > indivs.txt
+
+cat indivs.txt | while read line 
+do
+echo ${line}
+touch ${line}_full_genes.txt
+echo ">${line}" >> ${line}_full_genes.txt
+for file in ../../pargenes/chrysippus_inv/alignment_test_renamed/gene_*.txt
+do
+grep -A1 ">${line}" ${file} | grep -v ">" | grep -v "\-\-" | sed 's/^//g' | tr '\n' '_' >> ${line}_full_genes.txt
+done
+sed -i 's/_//g' ${line}_full_genes.txt
+done 
+
+mkdir pargenes_cat_run
+cat *_full_genes.txt > pargenes_cat_run/all_indiv_full.txt
+sed -i 's/>/\
+>/g' pargenes_cat_run/all_indiv_full.txt
+#remove blank line
+tail -n +2 pargenes_cat_run/all_indiv_full.txt > pargenes_cat_run/all_indiv_full2.txt
+rm -f pargenes_cat_run/all_indiv_full.txt
+
+pargenes.py -a ./pargenes_cat_run -o ./alignment_pargenes_cat_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+#now try running raxml on its own
+conda create -n raxml
+sconda raxml
+conda install -c bioconda raxml
+
+raxmlHPC -m GTRGAMMA -n test.raxmlout -s ../pargenes_cat_run/all_indiv_full2.txt -k -f a -x 12345 -p 12345 -N 100 -o SM19K001
+
+#######orientis_inv1_excl_chrysippus_inv
+grep ">" ../../pargenes/orientis_inv1_excl_chrysippus_inv/alignment_test_renamed/gene_11.txt | sed 's/>//g' > indivs.txt
+
+cat indivs.txt | while read line 
+do
+echo ${line}
+touch ${line}_full_genes.txt
+echo ">${line}" >> ${line}_full_genes.txt
+for file in ../../pargenes/orientis_inv1_excl_chrysippus_inv/alignment_test_renamed/gene_*.txt
+do
+grep -A1 ">${line}" ${file} | grep -v ">" | grep -v "\-\-" | sed 's/^//g' | tr '\n' '_' >> ${line}_full_genes.txt
+done
+sed -i 's/_//g' ${line}_full_genes.txt
+done 
+
+mkdir pargenes_cat_run
+cat *_full_genes.txt > pargenes_cat_run/all_indiv_full.txt
+sed -i 's/>/\
+>/g' pargenes_cat_run/all_indiv_full.txt
+#remove blank line
+tail -n +2 pargenes_cat_run/all_indiv_full.txt > pargenes_cat_run/all_indiv_full2.txt
+rm -f pargenes_cat_run/all_indiv_full.txt
+
+#pargenes.py -a ./pargenes_cat_run -o ./alignment_pargenes_cat_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+raxmlHPC -m GTRGAMMA -n test.raxmlout -s ../pargenes_cat_run/all_indiv_full2.txt -k -f a -x 12345 -p 12345 -N 100 -o SM19K001
+
+#######orientis_inv2
+grep ">" ../../pargenes/orientis_inv2/alignment_test_renamed/gene_11.txt | sed 's/>//g' > indivs.txt
+
+cat indivs.txt | while read line 
+do
+echo ${line}
+touch ${line}_full_genes.txt
+echo ">${line}" >> ${line}_full_genes.txt
+for file in ../../pargenes/orientis_inv2/alignment_test_renamed/gene_*.txt
+do
+grep -A1 ">${line}" ${file} | grep -v ">" | grep -v "\-\-" | sed 's/^//g' | tr '\n' '_' >> ${line}_full_genes.txt
+done
+sed -i 's/_//g' ${line}_full_genes.txt
+done 
+
+mkdir pargenes_cat_run
+cat *_full_genes.txt > pargenes_cat_run/all_indiv_full.txt
+sed -i 's/>/\
+>/g' pargenes_cat_run/all_indiv_full.txt
+#remove blank line
+tail -n +2 pargenes_cat_run/all_indiv_full.txt > pargenes_cat_run/all_indiv_full2.txt
+rm -f pargenes_cat_run/all_indiv_full.txt
+
+#pargenes.py -a ./pargenes_cat_run -o ./alignment_pargenes_cat_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+mkdir raxml && cd raxml
+raxmlHPC -m GTRGAMMA -n test.raxmlout -s ../pargenes_cat_run/all_indiv_full2.txt -k -f a -x 12345 -p 12345 -N 100 -o SM19K001
+
+#######orientis_inv3
+grep ">" ../../pargenes/orientis_inv3/alignment_test_renamed/gene_11.txt | sed 's/>//g' > indivs.txt
+
+cat indivs.txt | while read line 
+do
+echo ${line}
+touch ${line}_full_genes.txt
+echo ">${line}" >> ${line}_full_genes.txt
+for file in ../../pargenes/orientis_inv3/alignment_test_renamed/gene_*.txt
+do
+grep -A1 ">${line}" ${file} | grep -v ">" | grep -v "\-\-" | sed 's/^//g' | tr '\n' '_' >> ${line}_full_genes.txt
+done
+sed -i 's/_//g' ${line}_full_genes.txt
+done 
+
+mkdir pargenes_cat_run
+cat *_full_genes.txt > pargenes_cat_run/all_indiv_full.txt
+sed -i 's/>/\
+>/g' pargenes_cat_run/all_indiv_full.txt
+#remove blank line
+tail -n +2 pargenes_cat_run/all_indiv_full.txt > pargenes_cat_run/all_indiv_full2.txt
+rm -f pargenes_cat_run/all_indiv_full.txt
+
+#pargenes.py -a ./pargenes_cat_run -o ./alignment_pargenes_cat_out --cores 64 -d nt -m --job-failure-fatal --use-astral
+
+mkdir raxml && cd raxml
+raxmlHPC -m GTRGAMMA -n test.raxmlout -s ../pargenes_cat_run/all_indiv_full2.txt -k -f a -x 12345 -p 12345 -N 100 -o SM19K001
+
+######
+# 5. TE LANDSCAPES
+######
+
+#MEX_daplex - mxdp_6
+#MB18102_MAT - tig00001608, tig00001591, tig00001592
+#MB18102_PAT - tig00000001
+
+sconda /ceph/users/amackintosh/.conda/envs/assembly
+
+mkdir /scratch/rdekayne/G3_TEs && cd /scratch/rdekayne/G3_TEs
+
+mkdir MB18102_MAT
+cd /scratch/rdekayne/G3_TEs/MB18102_MAT
+cp /scratch/rdekayne/Dchr_KW_V8_annotation/masking/MB18102_MAT_v8_polished.uppercase.fasta .
+cp /scratch/rdekayne/Dchr_KW_V8_annotation/masking/MB18102_MAT_v8_polished.uppercase.fasta.out .
+cp ../../TE_overlap_Dchr2.2_full/Get.TE.Bed.sh .
+mkdir out
+./Get.TE.Bed.sh ./MB18102_MAT_v8_polished.uppercase.fasta tig00001608 ./MB18102_MAT_v8_polished.uppercase.fasta.out 50000 /scratch/rdekayne/G3_TEs/MB18102_MAT/out
+./Get.TE.Bed.sh ./MB18102_MAT_v8_polished.uppercase.fasta tig00001591 ./MB18102_MAT_v8_polished.uppercase.fasta.out 50000 /scratch/rdekayne/G3_TEs/MB18102_MAT/out
+./Get.TE.Bed.sh ./MB18102_MAT_v8_polished.uppercase.fasta tig00001592 ./MB18102_MAT_v8_polished.uppercase.fasta.out 50000 /scratch/rdekayne/G3_TEs/MB18102_MAT/out
+
+mkdir MB18102_PAT
+cd /scratch/rdekayne/G3_TEs/MB18102_PAT
+cp /scratch/rdekayne/Dchr_KW_V8_annotation/masking/MB18102_PAT_v8_polished.uppercase.fasta .
+cp /scratch/rdekayne/Dchr_KW_V8_annotation/masking/MB18102_PAT_v8_polished.uppercase.fasta.out .
+cp ../../TE_overlap_Dchr2.2_full/Get.TE.Bed.sh .
+mkdir out
+./Get.TE.Bed.sh ./MB18102_PAT_v8_polished.uppercase.fasta tig00000001 ./MB18102_PAT_v8_polished.uppercase.fasta.out 50000 /scratch/rdekayne/G3_TEs/MB18102_PAT/out
+
+#mex daplex a pain becuase of naming i.e. mxdp_6 matches mxdp_60 etc.
+mkdir MEX_daplex
+cd /scratch/rdekayne/G3_TEs/MEX_daplex
+cp ../../repeats/dplex_mex.uppercase.fa.masked .
+cp ../../repeats/dplex_mex.uppercase.fa.out .
+cp ../../TE_overlap_Dchr2.2_full/Get.TE.Bed.sh .
+mkdir out
+seqtk seq -l0 dplex_mex.uppercase.fa.masked > unwrapped_mxdp.fasta
+
+#need to get rid of 61-65
+
+grep -w -A1 "mxdp_6" unwrapped_mxdp.fasta > mxdp_6.fa
+grep -w -A1 "mxdp_6" dplex_mex.uppercase.fa.out > mxdp_6.out
+
+#now modify .sh and .genome.txt 
+echo "mxdp_6 9645914" > mxdp_6.genome.txt
+sed -i 's/ /\t/g' mxdp_6.genome.txt
+#and change bedtools line to use: 
+./Get.TE.Bed.sh ./mxdp_6.fa mxdp_6 ./mxdp_6.out 50000 /scratch/rdekayne/G3_TEs/MEX_daplex/out
+
+cd /scratch/rdekayne/G3_TEs
+cp MEX_daplex/out/* /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/mex_daplex/
+cp MB18*/out/* /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/MB18102
+
+mkdir /scratch/rdekayne/G3_TEs/SB211 && cd /scratch/rdekayne/G3_TEs/SB211
+#SB211PAT: 'h1tg000170l', 'h1tg000359l', 'h1tg000112l', 'h1tg000044l'
+#SB211MAT: "tig00000001", "tig00000185"
+
+cp /scratch/rdekayne/Dchr_KW_V4_annotation/TE_overlap_MB18102/Get.TE.Bed.sh .
+./Get.TE.Bed.sh /scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT.uppercase.fasta.masked tig00000001 /scratch/rdekayne/Dchr_SB211_annotation/masked/SB211_MAT.uppercase.fasta.out 50000 /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/SB211
+./Get.TE.Bed.sh /scratch/rdekayne/Dchr_SB211_annotation/SB211_MAT.uppercase.fasta.masked tig00000185 /scratch/rdekayne/Dchr_SB211_annotation/masked/SB211_MAT.uppercase.fasta.out 50000 /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/SB211
+
+./Get.TE.Bed.sh /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked h1tg000170l /scratch/rdekayne/Dchr_SB211_annotation/masked/SB211_PAT.uppercase.fasta.out 50000 /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/SB211
+./Get.TE.Bed.sh /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked h1tg000359l /scratch/rdekayne/Dchr_SB211_annotation/masked/SB211_PAT.uppercase.fasta.out 50000 /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/SB211
+./Get.TE.Bed.sh /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked h1tg000112l /scratch/rdekayne/Dchr_SB211_annotation/masked/SB211_PAT.uppercase.fasta.out 50000 /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/SB211
+./Get.TE.Bed.sh /scratch/rdekayne/Dchr_SB211_annotation/SB211_PAT.uppercase.fasta.masked h1tg000044l /scratch/rdekayne/Dchr_SB211_annotation/masked/SB211_PAT.uppercase.fasta.out 50000 /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/SB211
+
+
+#Dchry2.2: "contig15.1"
+mkdir /scratch/rdekayne/G3_TEs/Dchry2_2 && cd /scratch/rdekayne/G3_TEs/Dchry2_2
+cp /scratch/rdekayne/Dchr_KW_V4_annotation/TE_overlap_MB18102/Get.TE.Bed.sh .
+./Get.TE.Bed.sh /scratch/rdekayne/repeats/Dchry2.2.fa.masked contig15.1 /scratch/rdekayne/repeats/Dchry2.2.fa.out 50000 /data/martin/genomics/analyses/Danaus_genome/Rishi_TE_test/G3_TE_figures/Dchry2_2
