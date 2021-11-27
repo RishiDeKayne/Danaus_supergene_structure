@@ -9,7 +9,7 @@ The commands in `all_danaus_structure_commands.txt` cover:
 5. TE landscapes for chr15 equivalent  
   
 A number of additional files are also included such as:  
-The full gene tree: 
+The full gene tree:  
 `gene_tree.txt`  
   
 Pruned gene trees for each of the inversions:  
