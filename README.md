@@ -15,7 +15,7 @@ The full gene tree:
 Pruned gene trees for each of the inversions:  
 Region 1.2 - inverted in chrysippus only `chrysippus_inv_concat.raxmlout.BS70.nwk`  
 Region 1.1 - inverted in orientis only `orientis_inv1_excl_chrysippus_inv_concat.raxmlout.BS70.nwk`  
-Region 2 - `orientis_inv2_concat.raxmlout.BS70.nwk`  
-Region 4 - `orientis_inv3_concat.raxmlout.BS70.nwk`  
+Region 2 - inverted in orientis only `orientis_inv2_concat.raxmlout.BS70.nwk`  
+Region 4 - inverted in orientis only `orientis_inv3_concat.raxmlout.BS70.nwk`  
 
 Additional code for the production of TE landscapes (using a custom script GetTEBed) can be found [HERE](https://github.com/RishiDeKayne/GetTEBed)  
