@@ -1,4 +1,4 @@
-This repository has commands related to Kim & De-Kayne et al. XXXX  (URL XXX)
+This repository has commands related to Kim & De-Kayne et al. XXXX  (URL XXX)  
 This paper highlights the structure of each of the three alleles of the Danaus wing-pattern supergene
 
 The commands in `all_danaus_structure_commands.txt` cover:  
