@@ -12,7 +12,7 @@ A number of additional files are also included such as:
 The full gene tree: 
 `gene_tree.txt`  
   
-Pruned gene trees for each of the inversions: 
+Pruned gene trees for each of the inversions:  
 `chrysippus_inv.nwk`  
 `chrysippus_inv.nwk`  
 `chrysippus_inv.nwk`  
